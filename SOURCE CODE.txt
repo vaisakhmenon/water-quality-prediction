@@ -1,0 +1,171 @@
+import numpy as np
+import pandas as pd
+
+import matplotlib.pyplot as plt
+import seaborn as sb
+
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+from sklearn import metrics
+from sklearn.model_selection import cross_val_score
+from sklearn.metrics import classification_report, accuracy_score, classification_report, precision_score,recall_score,f1_score
+from sklearn.model_selection import GridSearchCV
+
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+
+import seaborn as sns
+import plotly.graph_objs as go
+
+import pickle
+
+df = pd.read_csv('C:/Users/vaisa/prj/water_potability.csv')
+df.head(10)
+df.info
+df.isnull().sum()
+df['ph'].fillna(value = df['ph'].median() , inplace = True)
+df['Sulfate'].fillna(value = df['Sulfate'].median() , inplace = True)
+df['Trihalomethanes'].fillna(value = df['Trihalomethanes'].median() , inplace = True)
+
+df.isnull().sum()
+#round off the pH value to one decimal place
+df['ph'] = df['ph'].round(decimals = 1)
+df["ph"].head()
+
+
+df["Type of Water"] = ""
+for i in range(0,len(df)):
+    if (df["ph"][i] > 9):
+        df["Type of Water"][i] = "Alkaline water"
+    elif (df["ph"][i] <= 9 and df["ph"][i] > 8):
+        df["Type of Water"][i] = "Bottled waters labeled as alkaline"
+    elif (df["ph"][i] <= 8 and df["ph"][i] > 7.5 ):
+        df["Type of Water"][i] = "Ocean water"   
+    elif(df["ph"][i] == 7.5 ):
+        df["Type of Water"][i] = "Tap water"
+    elif(df["ph"][i] < 7.5 and df["ph"][i] >=6.5):
+        df["Type of Water"][i] = "Common bottled waters"
+    elif(df["ph"][i] < 6.5 and df["ph"][i] >=5.5):
+        df["Type of Water"][i] = "Distilled reverse osmosis water"
+    else:
+        df["Type of Water"][i] = "Acidic water"
+
+df["Type of Hardness"] = ""
+for i in range(0,len(df)):
+    if (df["Hardness"][i] >=0  and df["Hardness"][i] < 17.1):
+        df["Type of Hardness"][i] = "Soft"
+    elif (df["Hardness"][i] >= 17.1 and df["Hardness"][i] < 60):
+        df["Type of Hardness"][i] = "Slightly hard"
+    elif (df["Hardness"][i] >= 60 and df["Hardness"][i] < 120 ):
+        df["Type of Hardness"][i] = "Moderately hard"   
+    elif(df["Hardness"][i] >= 120 and df["Hardness"][i] < 180):
+        df["Type of Hardness"][i] = "Hard"
+    else:
+         df["Type of Hardness"][i] = "Very Hard"
+
+
+df.head()
+
+plt.figure(figsize=(7,5))
+colors = sb.color_palette('twilight')[0:6]
+
+df['Potability'].value_counts().plot(kind='pie',labels = ['','','',''], autopct='%1.1f%%', colors = colors,  textprops = {"fontsize":15})
+plt.legend(labels=['Non-Potable', 'Potable'])
+plt.show()
+
+
+df.drop('Potability', axis=1).hist(figsize=(12,8));
+
+
+
+
+index_vals = df['Potability'].astype('category').cat.codes
+#df.value_counts(["Type of Hardness","Potability"],sort=True,ascending=True).plot(kind='barh')
+pd.value_counts(df.values.flatten())
+plt.figure(figsize=(12,7))
+plt.xlabel("Type of Hardness")
+plt.ylabel("Potability")
+plt.title("Item_Weight and Item_Outlet_Sales_Analysis")
+plt.plot(df["Type of Hardness"],df["Potability"],'.',alpha=0.3)
+
+
+#one hot encoding
+df = pd.get_dummies(df, columns = ['Type of Water', 'Type of Hardness'])
+df.head()
+
+df.shape
+x = df.drop(['Potability'], axis = 1)
+y = df['Potability']
+
+x_train, x_test, y_train, y_test= train_test_split(x, y, test_size=0.3, random_state = 1000)
+scores = {}
+RF = RandomForestClassifier()
+
+param_grid = {'max_depth': [80, 90, 100, 110]}
+RF_GS = GridSearchCV(RF, param_grid,cv=5,return_train_score=True)
+
+RF_GS.fit(x_train,y_train)
+
+print(RF_GS.best_estimator_)
+predicted_values = RF_GS.best_estimator_.predict(x_test)
+
+x = metrics.accuracy_score(y_test, predicted_values)
+y_pred_RF = RF_GS.best_estimator_.predict(x_test)
+print("Random Forest Accuracy is: ", x*100)
+print()
+print(classification_report(y_test,predicted_values))
+
+print('Accuracy: ', accuracy_score(y_pred_RF, y_test))
+print('Precision: ', precision_score(y_pred_RF, y_test))
+print('Recall: ', recall_score(y_pred_RF, y_test))
+print('F1 score: ', f1_score(y_pred_RF, y_test))
+
+scores['Random Forest'] = accuracy_score(y_pred_RF, y_test)*100
+
+
+
+from sklearn.svm import SVC
+model_linear = SVC(kernel = "linear")
+model_linear.fit(x_train,y_train)
+pred_test_linear = model_linear.predict(x_test)
+acclinear=np.mean(pred_test_linear==y_test)
+print(classification_report(y_test,pred_test_linear))
+print('Accuracy: ', accuracy_score(pred_test_linear, y_test))
+print('Precision: ', precision_score(pred_test_linear, y_test))
+print('Recall: ', recall_score(pred_test_linear, y_test))
+print('F1 score: ', f1_score(pred_test_linear, y_test))
+
+scores['svm'] = accuracy_score(pred_test_linear, y_test)*100
+
+
+
+DT = DecisionTreeClassifier(criterion="entropy",random_state=150)
+
+param_grid = {'criterion':['gini','entropy'],'max_depth':[4,5,6,7,8,9,10,11,12,15,20,30,40,50,70,90,120,150]}
+DT_GS = GridSearchCV(DT, param_grid,cv=5,return_train_score=True)
+
+DT_GS.fit(x_train,y_train)
+
+print(DT_GS.best_estimator_)
+predicted_values = DT_GS.best_estimator_.predict(x_test)
+
+x = metrics.accuracy_score(y_test, predicted_values)
+y_pred_DT = DT_GS.best_estimator_.predict(x_test)
+print("Decision Tree Accuracy is: ", x*100)
+print()
+print(classification_report(y_test,predicted_values))
+
+print('Accuracy: ', accuracy_score(y_pred_DT, y_test))
+print('Precision: ', precision_score(y_pred_DT, y_test))
+print('Recall: ', recall_score(y_pred_DT, y_test))
+print('F1 score: ', f1_score(y_pred_DT, y_test))
+
+scores['Decision Tree'] = accuracy_score(y_pred_DT, y_test)*100
+scores
+
+
+filename='C:/Users/vaisa/prj/water_potability.pkl'
+pickle.dump(RF_GS, open(filename, 'wb'))
+# load the model from disk
+#loaded_model = pickle.load(open("C:/Users/admin/Documents/project-rijo/water quality prediction/water_portability/water_portability.sav", 'rb'))
+#result = loaded_model.score(x_train,y_train) 
